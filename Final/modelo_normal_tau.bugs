@@ -1,0 +1,10 @@
+
+model{
+for(i in 1:N){
+x[i] ~ dnorm(0, nu)
+}
+# iniciales
+nu <- 1/sigma2
+sigma2 ~ dunif(0.1, 300)
+tau <- log(sqrt(sigma2))
+}

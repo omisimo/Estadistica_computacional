@@ -1,0 +1,114 @@
+---
+title: "Examen Parcial Estadística Computacional"
+author: "Omar Díaz Landa"
+date: "Tuesday, October 07, 2014"
+output: html_document
+---
+
+
+<style>
+  .caja {
+    background-color:mistyrose;
+    padding:5px;
+  }
+</style>
+
+</br>
+
+```{r, echo=FALSE, message=FALSE, error=FALSE}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(plyr)
+library(boot)
+library(bootstrap)
+library(xlsx)
+```
+
+
+## Pregunta 1
+
+Una caja contiene 10 pares de aretes, si se seleccionan 8 aretes, cuál es 
+la probabilidad de:
+
+#### + No se seleccione ningún par
+
+Para conocer la probabilidad de que no se seleccione ningún par, es necesario en primera instancia crear una base de datos que represente nuestro espacio muestral. La base creada es la siguiente:
+```{r}
+arete = c('A1','A2','B1','B2','C1','C2','D1','D2','E1','E2',
+           'F1','F2','G1','G2','H1','H2','I1','I2','J1','J2')
+```
+Posteriormente, se pretende simular el evento una gran cantidad de veces, de tal manera que se pueda observar la probabilidad a la que se converge. Para ello, se ha creado la siguiente función, la cual se ejecutará un total de $50000$ veces.
+
+En dicha función se tomará una muestra sin reemplazo de los los 20 aretes disponibles y de la muestra seleccionada se observará y registrará si hay algún par en ella. Finalmente se calcularán casos favorables entre casos totales para conocer la probabilidad de interés.
+
+
+```{r,echo=TRUE}
+nopar<-function(){
+  muestra <- sample_n(as.data.frame(arete),size=8,replace=FALSE)
+  letras <- substr(muestra$arete,1,1)
+  par<-length(unique(letras))<nrow(muestra)
+  return(par)
+}
+
+
+B=50000
+nopar<-rdply(B,nopar)
+1-(sum(nopar$V1)/B)
+```
+
+#### + Se seleccione exactamente un par completo
+
+De manera similar al caso anterior, es posible simular la probabiliadd de que se seleccione exactametne un par completo, así pues, en este caso se tomará la muestra y se revisarán cuantos aretes de cada clase se tienen, si nos sobra un solo arete es por que hay un par en la muestra seleccionada. Por lo tanto, la función mosstrada a continuación evalua si el número de aretes distintos seleccionados son 7.
+
+
+```{r,echo=TRUE}
+expar<-function(){
+  muestra <- sample_n(as.data.frame(arete),size=8,replace=FALSE)
+  letras <- substr(muestra$arete,1,1)
+  par<-length(unique(letras))==(length(letras)-1)
+  return(par)
+}
+
+E=50000
+nop<-rdply(E,expar)
+(sum(nop$V1)/E)
+```
+
+
+![Rplot2](C:\Users\mb49616\Desktop\pry\Rplot2.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+You can also embed plots, for example:
+
+```{r, echo=FALSE}
+plot(cars)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

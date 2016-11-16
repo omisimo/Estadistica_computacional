@@ -1,0 +1,234 @@
+---
+title: "Simulación"
+author: "Teresa Ortiz"
+output: html_document
+---
+
+<style>
+  .caja {
+    background-color:mistyrose;
+    padding:5px;
+  }
+</style>
+
+<br/>
+
+#### Simulación de variables aleatorias continuas
+
+### Transformación inversa
+```{r, include=FALSE}
+library(plyr)
+library(dplyr)
+```
+
+<div class = "caja">
+Sea $U$ una variable aleatoria con ditribución $U(0,1)$. Para cualquier 
+función de distribución $F$ la variable aleatoria $X$ definida como 
+$$X = F^{-1}(U)$$
+tiene distribución $F$.   
+</div>
+
+La proposición anterior nos da un camino para simular variables aleatorias 
+continuas generando un número aleatorio $U$ y definiendo $X = F^{-1}U$.
+
+#### Ejemplo: Exponencial
+
+Si $X$ es una variable aleatoria exponencial con tasa 1, entonces
+
+$$F(x)=1-e^{-x}$$
+
+Si definimos $x=F^{-1}(u)$, entonces
+$$u=F(x)=1-e^{-x}$$
+o 
+$$x = -log(1-u)$$
+
+Vale la pena notar que si $U$ tiene distribución uniforme(0,1), $1-U$ también
+se distribuye uniforme(0,1).
+
+```{r}
+simExp <- function(){
+  u <- runif(1)
+  x <- -log(u)
+}
+```
+
+Notemos que para cualquier constante positiva $c$, $cX$ tiene distribución 
+exponencial con media $c$, por tanto una variable aleatoria exponencial con 
+parámetro $\beta$ se puede generar de la siguiente manera:
+
+$$X=-\beta log(U)$$
+
+```{r, fig.height=4, fig.height=4.5}
+simExpBeta <- function(beta){
+  -beta * log(runif(1))
+}
+sims <- rdply(1000, simExpBeta(2))
+mean(sims$V1)
+hist(sims$V1)
+```
+
+El algoritmo anterior también provee una manera de generar variables aleatorias
+Poisson. Primero, recordemos que un proceso Poisson con tasa $\lambda$ resulta
+cuando los tiempos de espera entre eventos sucesivos son exponenciales 
+independientes con parámetro $\beta$, para este proceso el número de eventos 
+al tiempo 1 se distribuye Poisson con parámetro $\lambda = 1/\beta$. Para este
+proceso, $N(1)$, el número de eventos en el tiempo 1 se distribuye Poisson con 
+media $1/\beta$. Si denotamos por $X_i$ los tiempos entre eventos, el $n$-ésimo
+evento ocurrirá en el tiempo $\sum_{i=1}^n X_i$ y por tanto el número de eventos
+al tiempo 1 se puede expresar como:
+
+$$N(1)=max\bigg\{n: \sum_{i=1}^nX_i \leq 1\bigg\}$$
+
+Esto es, el número de eventos al tiempo 1 es igual a la $n$ mayor para la cual 
+el n-ésimo evento ocurrió al tiempo 1. Por ejemplo, si el cuarto evento ocurrió
+al tiempo uno pero el quinto no, habría 4 eventos al tiempo 1. Por tanto, usando
+el ejemplo anterior, podemos generar una variable aleatoria Poisson con media 
+$\lambda = 1/\beta$ generando números aleatorios $U_1,...U_n,...$ y definiendo
+
+$$N=max\bigg\{n: \sum_{i=1}^n -\beta log(U_i)\bigg\}$$
+$$=max\bigg\{n: \sum_{i=1}^n -1/\lambda log(U_i)\bigg\}$$
+$$=max\bigg\{n:\sum_{i=1}^n log(U_i)\geq -\lambda \bigg\}$$
+$$=max\{n:log(U_1\cdot\cdot\cdot U_n) \geq -\lambda\}$$
+$$=max\{n: U_1\cdot \cdot \cdot U_n \geq e^{-\lambda}\}$$
+
+Entonces, una variable aleatoria Poisson con media $\lambda$ se puede generar
+a partir de una sucesión de números aleatorios, generando números hasta que
+el producto sea menor a $e^{-\lambda}$ y definiendo $X$ como uno menos del 
+número de números aleatorios requeridos.
+
+$$N = min\{n: U_1\cdot\cdot\cdot U_n < e^{-\lambda}\} - 1$$
+
+```{r}
+poisson <- function(lambda){
+  u <- runif(1)
+  N <- 1
+  while(u > exp(-lambda)){
+    u <- u * runif(1)
+    N <- N + 1
+  }
+  N - 1
+}
+
+poisson(10)
+mean(rdply(1000, poisson(10))$V1)
+```
+
+#### Ejemplo: Gamma
+
+Supongamos que deseamos generar el valor de una variable aleatoria $gamma(n,\beta)$, 
+la función de distribución es,
+
+$\int_{0}^x \frac{1}{\beta^\alpha \Gamma(\alpha)}x^{\alpha-1}e^{-x/\beta}dy$
+
+la inversa de la función de distribución acumulada anterior no se puede escribir 
+de forma cerrada. Sin embargo, podemos simular de ella usando que
+una $gamma(n,\beta)$ se puede ver como la suma de $n$ exponenciales independientes, cada una con parámetro $\beta$:
+
+$$X=-\beta log(U_1)-\cdot\cdot\cdot - \beta log(U_n)$$
+$$=-\beta log(U_1\cdot\cdot\cdot U_n)$$
+
+donde la identidad $\sum log(x_i) = log(x_1\cdot\cdot\cdot x_n)$ deriva en 
+ganancias computacionales.
+
+```{r}
+gamma_nb <- function(n, beta){
+  -beta * log(Reduce(`*`,runif(10)))
+}
+sims_gamma <- rdply(1000, gamma_nb(n = 10, beta = 2))
+mean(sims_gamma$V1)
+var(sims_gamma$V1)
+```
+
+### Aceptación y rechazo
+Supongamos que tenemos un método para generar variables aleatorias con función de densidad $g(x)$, podemos usarla como base para generar obsrrvaciones de una variable aleatoria con densidad $f(x)$ generando $Y$ de $g$ y después aceptando 
+el valor generado con una probabilidad proporcional a $f(Y)/g(Y)$. Sea $c$ una constante tal que 
+$$\frac{f(y)}{g(y)} \leq c$$
+
+para toda $c$, entonces el método se puede escribir como sigue:
+
+<div class = "caja">
+**Aceptación y rechazo**
+
+1. Genera $Y$ con densidad $g$.  
+2. Genera un número aleatorio $U$.  
+3. Si $U \leq \frac{f(Y)}{cg(Y)}$
+define $X=Y$, de lo contrario regresa a 1.
+
+El método de aceptación y rechazo es análogo al correspondiente a variables
+aleatorias discretas.
+
+(i) La variable aleatoria generada usando el método de aceptación y rechazo
+tiene densidad $f$.  
+(ii) El número de iteraciones del algoritmo que se necesitan es una variable
+aleatoria geométrica con media $c$.
+</div>
+
+#### Ejemplo: Beta
+Usemos el método de aceptación y rechazo para generar observaciones de una 
+variable aleatoria $beta(2,4)$:
+$$f(x)=20x(1-x)^3$$
+La variable aleatoria beta toma valores en el intervalo (0,1) por lo que consideremos $g(x)=1$, para $0<x<1$. Para determinar la menor $c$ tal que $f(x)/g(x)\leq c$ podemos derivar y obtenemos $c = 135/64$,
+$$\frac{f(x)}{g(x)} \leq 20 \cdot \frac{1}{4} \bigg(\frac{3}{4}\bigg)^3 = \frac{135}{64}$$
+
+y 
+
+$$\frac{f(x)}{cg(x)}=\frac{256}{27}x(1-x)^3$$
+
+por lo que el procedimiento para simular sería el siguiente:
+
+```{r}
+beta24 <- function(){
+  # 1. Generar dos números aleatorios U_1, U_2. 
+  u1 <- runif(1)
+  u2 <- runif(1)
+  # 2. Comparar con f(x)/cg(x)
+  while(u2 > 256 / 27 * u1 * (1 - u1) ^ 3){
+    u1 <- runif(1)
+    u2 <- runif(1)
+  }
+  u1
+}
+sims <- rdply(1000, beta24)
+mean(sims$V1)
+```
+
+#### Ejemplo: Gamma(3/2, 1)
+Supongamos que deseamos generar simulaciones de una variable aleatoria con densidad gamma(3/2, 1):
+$$f(x)=\frac{1}{\Gamma(3/2)}x^{1/2}e^{-x}$$
+dado que la variable aleatoria de nuestro interés se concentra en los números positivos, y tiene media $3/2$, es conveniente usar el método de aceptación y rechazo con la variable aleatoria exponencial de la misma media.
+$$g(x)=\frac{2}{3}e^{-x2/3}$$
+
+![](../imagenes/manicule2.jpg) Usa el método de aceptación y rechazo para generar 1000 observaciones de una variable aleatoria con distribución gamma(3/2,1).
+
+#### Ejemplo: Variable aleatoria normal
+Nuestro objetivo es primero, simular una variable aleatoria normal estándar Z, para ello comencemos notando que el valor absoluto de Z tiene función de densidad:
+$$f(x)=\frac{2}{\sqrt{2\pi}}e^{-x^2/2}$$
+con soporte en los reales positivos. Generaremos observaciones de la densidad anterior usando el método de aceptación y rechazo con $g$ una densidad exponencial com media 1:
+
+$$g(x)= e^{-x}$$
+
+Ahora,
+$\frac{f(x)}{g(x)}=\sqrt{2/\pi}e^{x - x^2/2}$
+y por tanto el máximo valor de $f(x)/g(x)$ ocurre en el valor $x$ que maximiza
+$x - x^2/2$, esto ocurre en $x=1$, y podemos tomar $c=\sqrt{2e/\pi}$, 
+$$\frac{f(x)}{cg(x)}=exp\bigg\{x - \frac{x^2}{2}-{1}{2}\bigg\}$$
+$$=exp\bigg\{\bigg - \frac{(x-1)^2}{}2\}$$
+ 
+y por tanto podemos generar el valor absoluto de una variable aleatoria con 
+distribución normal estándar de la siguiente manera:
+
+1. Genera $Y$ una variable aleatoria exponencial con tasa 1.  
+2. Genera un número aleatorio $U$.  
+3. Si $U \leq exp\{-(Y-1)^2/2\}$ define $X=Y$, en otro caso vuelve a 1.  
+
+Para generar una variable aleatoria con distribución normal estándar $Z$ simplemente elegimos $X$ o $-X$ con igual probabilidad.
+
+Notemos además que en paso 3 $Y$ es aceptado si $U \leq exp(-(Y-1)^2/2)$ esto es equivalente a $-log(U) \geq (Y-1)^2/2$ y recordemos que $-log(U)$ es exponencial con parámetro 1, por lo que podems escribir los pasos como:
+
+1. Genera 2 exponenciales independientes con parámetro 1: $Y_1, Y_2$.  
+2. Si $Y_2 \geq (Y_1 - 1)^2/2$ define $X=Y$, de lo contrario vuelve a 1.
+
+Supongamos ahora que aceptamos $Y_1$, esto es equivalente a decir que $Y_2$ es mayor a $(Y_1 - 1)^2/2$, y la diferencia $Y_2 - (Y_1 - 1)^2/2$ se distribuye exponencial con parámetro 1. Esto es, cuando aceptamos en el segundo paso no sólo obtenemos $X$ sino que calculando
+$Y_2 - (Y_1 - 1)^2/2$ podemos generar una variable aleatoria exponencial con 
+parámetro 1 independiente de $X$. Esto es relevante pues si estamos generando una
+sucesión de variables aleatorias normales obtendríamos un algoritmo más eficiente.

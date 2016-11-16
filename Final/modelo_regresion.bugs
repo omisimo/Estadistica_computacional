@@ -1,0 +1,11 @@
+
+model{
+  for(i in 1 : n) {
+    y[i] ~ dnorm(y.hat[i], tau.y) 
+    y.hat[i] <- a + b * x[i]
+  }
+  a ~ dnorm(0, 0.001)
+  b ~ dnorm(0, 0.001)
+  tau.y <- pow(sigma.y, -2)
+  sigma.y ~ dunif(0, 100)
+}

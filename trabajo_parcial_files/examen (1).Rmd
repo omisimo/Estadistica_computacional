@@ -1,0 +1,200 @@
+---
+title: "Examen parcial"
+output: html_document
+---
+
+</br>
+
+**Entrega: 7 de octubre**
+
+**Instrucciones: Resuelve las siguientes preguntas, tus respuestas deben ser 
+claras y debes incluir tus procedimientos/código de manera ordenada y comentado.**
+
+</br>
+
+1. Una caja contiene 10 pares de aretes, si se seleccionan 8 aretes, cuál es 
+la probabilidad de:
+
++ No se seleccione ningún par.
+
++ Se seleccione exactamente un par completo.
+
+***
+
+2. A y B juegan una serie de juegos. En cada juego A gana con probabilidad 0.4 y 
+B con probabilidad 0.6 (independiente de lo ocurrido en los otros juegos). Paran
+de jugar cuando el número total de juegos ganados de un jugador es dos juegos
+más que el total de juegos ganados por el otro jugador:
+
++ Encuentra la probabilidad de que se jueguen 4 juegos en total.
+
++ Encuentra la probabilidad de que A gane la serie.
+
+***
+
+3. La base de datos _amis_ (publicada por G. Amis) contiene información de 
+velocidades de coches en millas por hora, las mediciones se realizaron en 
+carreteras de Cambridgeshire, y para cada carretera se realizan mediciones en 
+dos sitios. Mas aún, las mediciones se realizaron en dos ocasiones, antes y 
+después de que se instalara una señal de alerta (de dismunición de velocidad), 
+esta señal se erigió únicamente en uno de los dos sitios de cada carretera.  
+La cantidad de interés es el cambio medio relativo de velocidad en el cuantil 
+0.85. Se eligió esta cantidad porque el objetivo de la señal de alerta es 
+disminuir la velocidad de los conductores más veloces.
+
+  Variables: speed: velocidad de los autos en mph, period: periodo en que
+se hicieron las mediciones 1 indica antes de la señal, 2 cuando ya había
+señal, pair: carretera en que se hizo la medición.
+
+
+
+a) ¿Las observaciones conforman una muestra aleatoria? Explica tu respuesta y en 
+caso de ser negativa explica la estructura de los datos.
+
+b) El estadístico de interés se puede escribir como 
+$$\eta=\frac{1}{m}[(\eta_{a1}-\eta_{b1})-(\eta_{a0}-\eta_{b0})]$$ 
+donde $\eta_{a1}$, $\eta_{b1}$ corresponden a los cuartiles 0.85 de la 
+distribución de velocidad en los sitios en los que se colocó la señal de 
+alerta, ($a$ corresponde a las mediciones antes de la señal y $b$ después) y $\eta_{a0}$, $\eta_{b0}$ son los correspondientes para los sitios sin
+alerta, $m$ denota el número de carreteras. Calcula el estimador _plug-in_ de $\eta$.
+
+c) Genera $B=3000$ replicaciones bootstrap de $\eta$ y realiza un histograma. 
+Pista: 1) considera tu respuesta de a) para tomar las muestras bootstrap, 2)
+hay muchas maneras de resolver esta pregunta, sin embargo, algunas funciones
+que te pueden resultar útiles son ldply y rdply (de plyr), do.call, 
+group_by, mutate y summarise (de dplyr), spread (tidyr). También puedes usar 
+los paquetes boot ó bootstrap si lo deseas.
+
+d) Genera intervalos de confianza usando la aproximación normal y percentiles. Comparalos y en caso de encontrar diferencias explica a que se deben. 
+
+***
+
+4. Recuerda que una variable aleatoria $X$ tiene una distribución geométrica
+con parámetro $p$ si
+$$p_X(i) = P(X=i)=pq^{i-1}$$
+para $i=1,2,...$  y donde $q=1-p$. 
+
+Notemos que
+$$\sum_{i=1}^{j-1}P(X=i)=1-P(X\geq j-1)$$
+$$=1 - q^{j-1}$$
+para $j\geq 1$.
+por lo que podemos generar un valor de $X$ generando un número aleatorio
+$U$ y seleccionando $j$ tal que
+$$1-q^{j-1} \leq U \leq 1-q^j$$
+
+Esto es, podemos definir $X$ como:
+$$X=min\{j : (1-p)^j < 1-U\}$$
+usando que el logaritmo es una función monótona (i.e. $a<b$ implica $log(a)<log(b)$) obtenemos que podemos expresar $X$ como 
+$$X=min\big\{j : j \cdot log(q) < log(1-U)\big\}$$
+$$=min\big\{j : j > log(U)/log(q)\big\}$$
+entonces
+$$X= int\bigg(\frac{log(U)}{log(q)}\bigg)+1$$
+
+es geométrica con parámetro $p$.
+
+Ahora, sea $X$ el número de lanzamientos de una moneda que se requieren
+para alcanzar $r$ éxitos (soles) cuando cada lanzamiento es independiente,  $X$ tiene una distribución binomial negativa.
+
+Una variable aleatoria $X$ tiene distribución binomial negativa con parámetros $(r,p)$ donde $r$ es un entero positivo y $0<p<r$ si
+$$P(X=j)=\frac{(j-1)!}{(j-r)!(r-1)!}p^r(1-p)^{j-r}.$$
+
+a) Recuerda la distribución geométrica ¿cuál es a relación entre la variable 
+aleatoria binomial negativa y la geométrica?
+
+b) Utiliza el procedimiento descrito para generar observaciones de una variable aleatoria con distribución geométrica y la relación entre la geométrica y la 
+binomial negativa para generar simulaciones de una variable aleatoria con
+distribución binomial negativa (parámetro p = 0.4, r = 20). Utiliza la semilla 
+221285 (en R usa set.seed) y reporta las primeras 10 simulaciones obtenidas.
+
+c) Verifica la relación
+$$p_{j+1}=\frac{j(1-p)}{j+1-r}p_j$$
+y úsala para generar un nuevo algoritmo de simulación, vuelve a definir la
+semilla y reporta las primeras 10 simulaciones.
+
+d) Realiza 10,000 simulaciones usando cada uno de los algoritmos y compara el 
+tiempo de ejecución.
+
+e) Genera un histogrma para cada algoritmo (usa 1000 simulaciones) y comparalo 
+con la distribución construida usando la función de R _dnbinom_.
+
+
+****
+
+5. Cobertura de intervalos de confianza. En este problema realizarás un ejercicio 
+de simulación para comparar intervalos de confianza. Utiliza la función rnorm
+(y la semilla 221285) para simular muestras de tamaño 10 de una distribución 
+normal estándar, el estadístico de interés es $\theta=exp(\mu)$. 
+
+Sigue el siguiente proceso:
+
+i) Genera una muestra aleatoria de una distribución normal estándar de tamaño 10.
+
+ii) Genera 6000 muestras bootstrap y calcula intervalos de confianza del 95\% 
+para $\hat{\theta}$ usando 1) el método normal, 2) percentiles y 3) BC_a.
+
+iii) Revisa si el intervalo de confianza contiene el verdadero valor del parámetro
+($\theta=1$), en caso de que no lo contenga registra si falló por la izquierda 
+(el límite inferior >1) o falló por la derecha (el límite superior <1).
+
+a) Repite el proceso descrito 500 veces y llena la siguiente tabla:
+
+Método     | \% fallo izquierda   | \% fallo derecha  | cobertura (simulaciones)
+-----------|----------------------|-------------------|------------------------ 
+Normal     |                      |                   |
+Percentiles|                      |                   |
+BC_a       |                      |                   |
+
+La columna cobertura es una estimación de la cobertura del intervalo basada en 
+las simulaciones, para calcularla simplemente escribe el porcentaje de los 
+intervalos que incluyeron el verdadero valor del parámetro. Recuerda usar la 
+semilla.
+
+b) Realiza una gráfica de páneles, en cada panel mostrarás los resultados de 
+uno de los métodos (normal, percentiles y BC_a), el eje x corresponderá al 
+número de intervalo de confianza ($1,...,500$) y en el vertical 
+graficarás los límites de los intervalos, es decir graficarás 2 líneas (usa 
+geom_line) una corresponderá a los límites inferiores de los intervalos, y otra 
+a los superiores.
+
+c) Repite los inciso a) y b) del ejercicio con la diferencia de generar 
+simulaciones de muestras de tamaño 20 de una distribución Poisson con 
+parámetro $\lambda = 2.5$ y 
+estadístico de interés $\theta = exp(-2\lambda)$. **Recuerda volver a establecer
+la semilla al inicio del proceso (escríbela sólo una vez).**
+
+Nota: Un ejemplo en donde la cantidad $P(X=0)^2 = e^{-2\lambda}$ es de interés 
+es como sigue: las llamadas telefónicas a un conmutador se modelan con 
+un procesp Poisson y $\lambda$ es el número promedio de llamadas por minuto, 
+entonce $e^{-2 \lambda}$ es la probabilidad de que no se reciban llamadas en 
+2 minutos.
+
+****
+
+6. En la carpeta datos encontrarás un excel llamado Cuadros_2010 que contiene
+información de migración en México, para más información de los datos
+visita la sección de [migración interna](http://www.conapo.gob.mx/es/CONAPO/Migracion_Interna) de CONAPO. Cada pestaña contiene información de migración
+distinta (relativa a salarios, edad, género, etc.) elige una tabla (pestaña) y 
+realiza lo siguiente:
+
+a) Lee los datos en R, ¿cumplen los principios de los datos limpios? Si tu
+respuesta es negativa explica las razones por las que no los cumplen y 
+_limpialos_.
+
+b) Escribe al menos una pregunta que puedas responder con estos datos y genera 
+al menos una gráfica que te ayude a contestarla o entenderla mejor.
+
+
+</br>
+</br>
+
+
+
+**No he dado ni recibido ayuda no autorizada en la realización de este exámen.**
+
+</br>
+</br>
+
+------------
+
+Firma
+

@@ -1,0 +1,754 @@
+---
+title: "Proyecto de Estadística Computacional"
+author: "Andreu Boada de Atela, 110265"
+date: "Octubre 7, 2014"
+output: html_document
+---
+Librerías
+
+```{r}
+library(plyr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(boot)
+library(xlsx)
+library(stringr)
+library(bootstrap)
+library(RColorBrewer)
+```
+
+## Problema 1
+
+Un experimento aleatorio consiste en seleccionar 8 aretes al azar de un conjunto de 10 pares de aretes. Se desea calcular la probabilidad de que no se seleccione ningún par de aretes. Este problema se puede resolver utilizando ``simulación''.
+
+Primero se crea un vector con los aretes:
+
+```{r}
+aretes = c('A1','A2','B1','B2','C1','C2','D1','D2','E1','E2',
+           'F1','F2','G1','G2','H1','H2','I1','I2','J1','J2')
+```
+
+La idea de la simulación es:
+* Tomar una muestra sin reemplazo, correspondiente a la seleccción aleatoria de 8 aretes.
+* Ver si hay aretes del mismo par.
+
+```{r}
+nopar <- function(){
+  muestra = sample(aretes,8)
+  ind = substr(muestra,1,1)
+  par = length(unique(ind)) < length(ind)
+  return(par)
+}
+E = 10000
+nop <- rdply(E, nopar)
+1 - sum(nop$V1)/E
+```
+
+La probabilidad que se obtiene después de una simulación de un millón de muestras es 0.091398.
+
+Ahora se desea calcular la probablilidad de que haya exactamente un par. Se toma la muestra, se ve cuántos aretes hay de cada tipo diferente, y si hay 7, significa que hay exactamente un par.
+
+```{r}
+unpar <- function(){
+  muestra = sample(aretes,8)
+  ind = substr(muestra,1,1)
+  par = length(unique(ind)) == 7
+  return(par)
+}
+E = 10000
+unp <- rdply(E, unpar)
+sum(unp$V1)/E
+```
+
+La probabilidad con un millón de simulaciones es 0.426705.
+
+## Problema 2
+
+Hay dos jugadores, A, B. La probabilidad de que A gane un juego es 0.4 y la probabilidad de que B gane un juego es de 0.6. El experimento consiste en jugar hasta que o A o B (alguno de los dos) haya ganado dos juegos más que el otro. 
+
+Se desea calcular la probabilidad de que el número de jugadas sea 4. Para el evento de que haya ganado A o B en cada jugada, se calcula una uniforme. Si el valor es menor o igual a 0.4 entonces A gana el juego, de lo contrario gana B. El experimento continúa siempre y cuando ninguno de los dos haya ganado dos juegos más que el otro.
+
+```{r}
+juego <- function(){
+  A = 0
+  B = 0
+  k = 0
+  acabo = FALSE
+  while(!acabo){
+    u = runif(1)
+    if(u <= 0.4){
+      A = A + 1
+    }else{
+      B = B + 1
+    }
+    # Checar si alguna lleva dos juegos más ganados que el otro
+    if(A == B + 2 | B == A + 2){
+      acabo = TRUE
+    }
+    k = k + 1
+  }
+  return(k)
+}
+E = 10000
+jugada = rdply(E, juego)
+cuatros = filter(jugada,  V1 == 4)
+nrow(cuatros)/E
+```
+
+
+La probabilidad resultante es: 0.249657
+
+Para calcular la probabilidad de que A gane la serie se deben contar los casos en los que A obtiene dos éxitos más que B, y que además B nunca le gana a A. la probabilidad es 0.307979.
+
+```{r}
+ganaA <- function(){
+  A = B = k = 0
+  acabo = FALSE
+  while(!acabo){
+    u = runif(1)
+    if(u < 0.4) A = A + 1 else B = B + 1
+    if(A == B + 2){ # Si gana A
+      k = 1
+      acabo = TRUE
+    }else{
+      if(B == A + 2) acabo = TRUE # Gana B
+    }
+  }
+  return(k)
+}
+E = 10000
+juego2 = rdply(E, ganaA)
+sum(juego2$V1)/E
+```
+
+## Problema 3
+
+Los datos de amis se van a usar para evaluar si en las carreteras de Cambridgeshire, la colocación de una señal de alerta tuvo el efecto de disminuir la velocidad de los conductores más veloces.
+
+Lectura de datos:
+
+
+```{r}
+amis <- read.csv("amis.csv")
+head(amis)
+```
+
+
+La muestra no es aleatoria, debido a que la base de datos se obtuvo a través de un diseño de experimentos. La variable period indica si se hizo la medición antes y después. Para la variable warning se tienen valores 1 y 2 para referir a carreteras sin y con warning. La variable period corresponde a las 11 carreteras. 
+
+Por cada combinación de medición (antes y después) para cada warning (1 y 2) se tomaron 100 datos por lo que se tienen 400 mediciones de velocidad por cada carretera. Hay 11 carreteras, por lo cual el total de datos es de $$11*2*2*100 = 4400.$$.
+
+
+Se tiene $\eta_{ij}$ definida de la siguiente forma:
+
+1. $\eta_{11}$ es el percentil 0.85 en el sitio 1 después de la señal.
+
+2. $\eta_{21}$ es el percentil 0.85 en el sitio 2 después de la señal.
+
+3.$\eta_{11}$ es el percentil 0.85 en el sitio 1 antes de la señal.
+
+4. $\eta_{11}$ es el percentil 0.85 en el sitio 2 antes de la señal.
+
+
+Las estimaciones iniciales son:
+
+```{r}
+aux11 <- subset(amis, amis$warning == 1 & amis$period == 2)
+n11 <- as.numeric(quantile(aux11$speed,0.85))
+n11
+
+aux21 <- subset(amis, amis$warning == 2 & amis$period == 2)
+n21 <- as.numeric(quantile(aux21$speed,0.85))
+n21
+
+aux12 <- subset(amis, amis$warning == 1 & amis$period == 1)
+n12 <- as.numeric(quantile(aux12$speed,0.85))
+n12
+
+aux22 <- subset(amis, amis$warning == 2 & amis$period == 1)
+n22 <- as.numeric(quantile(aux22$speed,0.85))
+n22
+
+eta = (1/11)*((n11 - n21) - (n12 - n22))
+eta
+```
+
+
+
+La estimación plug in de $\eta$ es de 
+$$
+\eta = \dfrac{1}{m}\left((\eta_{11}-\eta_{21})-(\eta_{12} - \eta_{22})\right)
+ =  \dfrac{1}{11}((43 - 46) - (43 - 45)) 
+ =  -\dfrac{1}{11}.
+$$
+
+
+Éste es el estadístico de interés porque si la velocidad hubiera disminuido entonces $\eta_{11} - \eta_{21}$ sería positivo y podríamos concluir que la señal funcionó. Para eso se utiliza el segundo término, como el grupo control en el cual nunca hubo señal (sitio 2). Para investigar si la disminución esta relacionada con el letrero es conveniente tomar en cuenta los sitios donde nunca hubo señal.
+
+Por ejemplo, si la velocidad total hubiera aumentado (por una tendencia ajena al experimento de la señal) entonces $(\eta_{11} - \eta_{21})$ sería negativo. Pero, quizá, la velocidad aumentó aún más en los sitios sin señal y $$\left[(\eta_{11} - \eta_{21}) - (\eta_{12} - \eta_{22})\right]$$ sería positivo.
+
+El objetivo ahora es hacer bootstrap. Para ello, se deben tomar muestras independientes para cada caso (antes y después) y donde nunca hubo señal en los dos periodos. Después, se calculan los cuantiles 0.85 y se calcula el estadístico.
+
+```{r}
+etaboot <- function(aux11,aux21,aux12,aux22){
+  n <- 1100
+  sample11 <- sample_n(aux11,size=n, replace=TRUE)
+  sample21 <- sample_n(aux21,size=n, replace=TRUE)
+  sample12 <- sample_n(aux12,size=n, replace=TRUE)
+  sample22 <- sample_n(aux22,size=n, replace=TRUE)
+  n11 <- quantile(sample11$speed,0.85)
+  n21 <- quantile(sample21$speed,0.85)
+  n12 <- quantile(sample12$speed,0.85)
+  n22 <- quantile(sample22$speed,0.85)
+  (1/11)*((n11 - n21) - (n12 - n22))
+}
+
+B = 3000
+eta_btsrp <- rdply(B, etaboot(aux11,aux21,aux12,aux22))
+colnames(eta_btsrp) <- c('num','boot')
+
+ggplot(eta_btsrp, aes(x=boot)) + 
+  geom_histogram(aes(y=..density..),binwidth = 0.02, fill = "mediumpurple1") + 
+  geom_vline(aes(xintercept = mean(boot)),size=1.5,color="violetred2") + 
+  theme(panel.background = element_rect(fill='mistyrose',colour='floralwhite'))
+```
+
+En el histograma se observan pocas observaciones alrededor de unas barras con muchas observaciones. En general se ve una tendencia simétrica.
+
+```{r}
+# Intervalos de confianza normales
+desv <- sd(eta_btsrp$boot)
+li.normal <- eta - 1.96 * desv
+ui.normal <- eta + 1.96 * desv
+
+p1 <- ggplot(eta_btsrp, aes(x = boot)) + 
+  geom_histogram(binwidth = 0.05, fill = "gray30") +
+  geom_vline(xintercept = c(li.normal, ui.normal, eta), 
+             color = c("black", "black", "red")) + 
+  labs(title = "Intervalo normal")+ 
+  theme(plot.title = element_text(size = rel(1.2)))
+
+# Intervalos de confianza con percentiles
+li_per <- quantile(eta_btsrp$boot, prob = 0.025)
+ui_per <- quantile(eta_btsrp$boot, prob = 0.975)
+
+p2 <- ggplot(eta_btsrp, aes(x = boot)) + 
+  geom_histogram(binwidth = 0.05, fill = "gray30") +
+  geom_vline(xintercept = c(li_per, ui_per, eta), 
+             color = c("black", "black", "red")) + 
+  labs(title = "Intervalo con percentiles")+ 
+  theme(plot.title = element_text(size = rel(1.2)))
+
+require(gridExtra)
+grid.arrange(p1, p2, ncol=1)
+```
+
+Los intervalos con normales y con cuantiles son muy similares. La desviación estándar es muy alta. Esto se ve en los histogramas y se debe a las barras con pocas observaciones al lado de las barras con muchas observaciones.
+
+## Problema 4
+
+Nos dicen que si $U\sim Uniforme(0,1)$ entonces 
+$$\left\lfloor{\dfrac{log(U)}{log(1-p)}}\right\rfloor + 1$$
+proviene de una distribución geometrica con parámetro p.
+
+```{r}
+geom <- function(p){
+  u = runif(1)
+  g = floor(log(u)/log(1-p)) + 1
+  return(g)
+}
+geometricas <- rdply(10000,geom(0.4))
+ggplot(geometricas, aes(x=V1)) + 
+  geom_histogram(aes(y=..density..), binwidth = 1, fill = "dodgerblue3")
+```
+
+Suma de geométricas independientes es binomial negativa. Es decir, si $X_1,X_2,\ldots,X_r \sim Geometrica(p)$ entonces $\sum_{i=1}^r{X_i} \sim \mbox{Binomial Negativa}(r,p)$.
+
+
+```{r}
+binomial_negativa <- function(p,r){
+  u = runif(r)
+  g = floor(log(u)/log(1-p)) + 1
+  return(sum(g))
+}
+# Primeros 10 valores de la binomial negativa
+set.seed(221285)
+r = 20
+p = 0.4
+sim1 <- rdply(10,binomial_negativa(p,r))$V1
+sim1
+```
+
+
+Otra forma de generar binomiales negativas es con la relación:
+
+$$
+p_{j+1} = \dfrac{j(1-p)}{j+1-r}p_j
+$$
+
+para $j=r,r+1,\ldots$
+
+Si $j=20$ y $p_{20} = 0.4^20$, la probabilidad inicial, entonces,
+
+$$
+p_{21} = \dfrac{21(0.6)}{21+1-20}p_20 =6.926923e-08 
+$$
+
+y así sucesivamente.
+
+Se puede usar esta relación para calcular la probabilidad acumulada y así seleccionar el entero para el cual se obtenga dicha probabilidad acumulada.
+
+```{r}
+otra_bn <- function(p,r){
+  u = runif(1)
+  j = 20
+  x = j
+  prob = p**r
+  acum = prob
+  while(u > acum){
+    prob = j/(j - r + 1)*(1 - p) * prob
+    acum = acum + prob
+    x = j
+    j = j + 1
+  }
+  return(x)
+}
+
+set.seed(221285)
+r = 20
+p = 0.4
+sim2 <- rdply(10,otra_bn(p,r))$V1
+sim2
+```
+
+
+Se pueden generar números aleatorios de una binomial negativa a través de la funcion de R,  `rnbinom`. Se le suman 20 para adaptarla a nuestra parametrización.
+
+```{r}
+set.seed(221285)
+rnbinom(10,r,p) + 20
+```
+
+
+Ahora, realizamos 10,000 simulaciones usando cada uno de los algoritmos y comparamos el tiempo de ejecución.
+
+```{r}
+#Utiliza ambos algoritmos para comparar tiempos
+R = 10000
+set.seed(221285)
+m1 <- system.time({
+  simulacion1 <- rdply(R,binomial_negativa(p,r))
+})
+set.seed(221285)
+m2 <- system.time({
+  simulacion2 <- rdply(R,otra_bn(p,r))
+})
+# Tiempo con el método 1
+m1
+# Tiempo con el método 2
+m2
+```
+
+Y ahora se desea comparar cada uno de los dos métodos con las simulaciones de R. En la gráfica se observa que ambos métodos producen valores que provienen de la misma distribución.
+
+
+```{r}
+# Simulacion con R
+# Utilizando geometricas:
+set.seed(221285)
+simR <- rnbinom(10000,20,.4)+20
+
+comp1 <- data.frame(metodo1 = simulacion1$V1, R = simR)
+comp1 <- gather(comp1,metodo,var)
+cols <- c('magenta','olivedrab2')
+p1 <- ggplot(comp1, aes(var, fill = metodo)) +
+  geom_histogram(alpha = 0.4, aes(y = ..density..), position = 'identity') +
+  scale_fill_manual(values = cols)
+
+comp2 <- data.frame(metodo2 = simulacion2$V1, R = simR)
+comp2 <- gather(comp2,metodo,var)
+
+p2 <- ggplot(comp2, aes(var, fill = metodo)) + 
+  geom_histogram(alpha = 0.4, aes(y = ..density..), position = 'identity') +
+  scale_fill_manual(values = cols)
+require(gridExtra)
+grid.arrange(p1, p2, ncol=2)
+```
+
+## Problema 5
+
+El objetivo es comparar intervalos de confianza a través de 3 métodos:
+
+1. Normal
+
+2. Percentiles
+
+3. BCa
+
+Para ello, generamos una muestra de tamaño 10 de una distribución normal estándar, supongamos que el parámetro de interés es $e^\mu$ donde $\mu$ es la media poblacional.
+
+Se puede calcular directamente el estimador plug in del estadístico de interés.
+
+```{r}
+# Estadistico de interes: exp(mu)
+set.seed(221285)
+muestra = rnorm(10)
+
+# Estimador plug-in
+theta_est = exp(mean(muestra))
+```
+
+Generamos 6000 muestras bootstrap y calculamos intervalos de confianza del 95%  usando 1) el método normal, 2) percentiles y 3) BC_a.
+
+
+```{r}
+bootmedia <- function(){
+  smple = sample(muestra,10,replace = TRUE)
+  return(exp(mean(smple)))
+}
+B = 6000
+thetaboot <- rdply(B,bootmedia)
+desv_est <- sd(thetaboot$V1)
+
+li.normal <- theta_est - 1.96 * desv_est
+ui.normal <- theta_est + 1.96 * desv_est
+ic.normal <- c(li.normal,ui.normal)
+ic.normal
+```
+
+
+Se puede hacer un histograma a partir de las estimaciones bootstrap y graficar también el intervalo de confianza con el método normal:
+
+
+```{r}
+ggplot(thetaboot, aes(x = V1)) + 
+  geom_histogram(binwidth = 0.05, fill = "gray30") +
+  geom_vline(xintercept = c(li.normal, ui.normal, theta_est), 
+             color = c("black", "black", "red"))
+```
+
+
+Ahora calculamos el intervalo de confianza utilizando percentiles.
+
+
+```{r}
+li_per <- round(quantile(thetaboot$V1, prob = 0.025), 2)
+ui_per <- round(quantile(thetaboot$V1, prob = 0.975), 2)
+ic.per <- c(as.numeric(li_per),as.numeric(ui_per))
+ic.per
+```
+
+Observamos que los intervalos son muy diferentes. Esto es debido a que la distribución no es simétrica. La distribución empírica de las estimaciones de bootsrap tiene una cola a la derecha miuy larga, por lo que no esperamos que los intervalos coincidan.
+
+Por último, utilizamos el método BCa (Biased Corrected and Accelerated) que es un método que corrige el sesgo (también usando bootstrap).
+
+Para ello vamos a utilizar las librerías `boot` y `bootstrap` de R y con la función `boot.ci` calcular los intervalos.
+
+Lo primero que se tiene que hacer es definir la función del estadístico de interés con la cual se va a hacer bootstrap. La función debe recibir los parámetros `indices` y `data` los cuales utiliza el método BCa para hacer bootstrap. Es decir, se debe seleccionar la muestra con los datos y los índices proporcionados por el método de R.
+
+
+```{r}
+theta_bar <- function(data, indices){
+  d <- data[indices,]
+  return(exp(mean(d)))
+}
+```
+
+La función boot hace bootstrap utilizando la funcion anterior en la que se definió el estadístico del cual se desea calcular el intervalo de confianza. 
+
+Después se hace bootstrap y se calcula el intervalo de confianza:
+
+```{r}
+obj <- boot(data = as.data.frame(muestra), statistic = theta_bar, R = 6000)
+obj2 <- boot.ci(obj, statistic = theta_bar, type="bca", index=1)
+ic.bca <- round(obj2$bca[4:5],2)
+ic.bca
+```
+
+El intervalo que se calculó mediante BCa es muy similar al intervalo de cuantiles. Esto sugiere que el intervalo calculado por el método normal es erróneo (y que esto, como ya se dijo, se debe a la asimetría de la distribución empírica de las estimaciones bootstrap).
+
+
+Vemos si el valor del parámetro theta = 1 se encuentra dentro de los intervalos. Se observa que es verdadero valor está dentro de los 3 intervalos. En la normal el intervalo no es muy bueno porque se trata de una distribución asimétrica y por ello los intervalos con percentiles y BCa son muy similares y el de la normal es diferente.
+
+Yo creo que el mejor intervalo es BCa porque hace la correción por sesgo. El intervalo de confianza normal se podría mejorar si se hicieran los cálculos aplicando la función inversa de la exponencial, es decir, logaritmo para normalizar la distribución del estadístico.
+
+```{r}
+ic.normal
+ic.per
+ic.bca
+```
+
+Ahora utilizamos un proceso para comparar si el parametro se encuentra dentro de los intervalos de confianza, o si existen fallos izquierdos o fallos derechos. Si el límite inferior es mayor a parámetro entonces se dice que hubo un fallo izquierdo, y si el límite superior es menor al parámetro, hubo fallo derecho.
+
+El proceso de comparación consiste en repetir el proceso anterior 500 veces y ver la tabla de frecuencias.
+
+```{r}
+set.seed(221285)
+n = 500
+fallos.norm = c(0,0,0)
+fallos.perc = c(0,0,0)
+fallos.bca = c(0,0,0)
+li.norm = rep(0,n)
+ls.norm = rep(0,n)
+li.perc = rep(0,n)
+ls.perc = rep(0,n)
+li.bca = rep(0,n)
+ls.bca = rep(0,n)
+thetas = rep(0,n)
+
+for(i in 1:n){
+  muestra = rnorm(10)
+  theta_est = exp(mean(muestra))
+  thetas[i] = theta_est
+  thetaboot = rdply(B,bootmedia)
+  # Intervalo por metodo normal
+  sdtheta = sd(thetaboot$V1)
+  li.norm[i] = theta_est - 1.96 * sdtheta
+  ls.norm[i] = theta_est + 1.96 * sdtheta
+  # Intervalo por metodo de percentiles
+  li.perc[i] = as.numeric(quantile(thetaboot$V1, prob = 0.025))
+  ls.perc[i] = as.numeric(quantile(thetaboot$V1, prob = 0.975))
+  # Intervalo por metodo BCa
+  obj = boot(data = as.data.frame(muestra), statistic = theta_bar, R = 6000)
+  obj2 = boot.ci(obj, statistic = theta_bar, type="bca", index=1)
+  li.bca[i] = obj2$bca[4]
+  ls.bca[i] = obj2$bca[5]
+}
+
+df.ic <- data.frame(li.norm,ls.norm,li.perc,ls.perc,li.bca,ls.bca,thetas)
+
+# Revisar en que caso esta el intervalo respecto al parametro
+# Cobertura
+cob.norm = sum(df.ic$li.norm <= 1 & 1 <= df.ic$ls.norm)
+cob.perc = sum(df.ic$li.perc <= 1 & 1 <= df.ic$ls.perc)
+cob.bca = sum(df.ic$li.bca <= 1 & 1 <= df.ic$ls.bca)
+# Fallo izquierdo
+fizq.norm = sum(df.ic$li.norm > 1)
+fizq.perc = sum(df.ic$li.perc > 1)
+fizq.bca = sum(df.ic$li.bca > 1)
+# Fallo derecho
+fder.norm = sum(df.ic$ls.norm < 1)
+fder.perc = sum(df.ic$ls.perc < 1)
+fder.bca = sum(df.ic$ls.bca < 1)
+
+tab <- data.frame(fizq = c(fizq.norm,fizq.perc,fizq.bca),
+                      fder = c(fder.norm,fder.perc,fder.bca),
+                      cob = c(cob.norm,cob.perc,cob.bca))
+rownames(tab) = c('norm','perc','bca')
+tab/500
+```
+
+Por úlimo, graficamos los intervalos de confianza para cada método.
+
+```{r}
+coef_df = df.ic %>%
+  gather(metodo,var,-thetas) %>%
+  separate(metodo, c("intervalo", "metodo"), 2) %>%
+  mutate(metodo = substr(metodo,2,10)) %>%
+  spread(intervalo,var) %>%
+  mutate(ind = rep(1:n,each=3)) 
+
+ggplot(coef_df, aes(x=ind, y = thetas, ymin = li, ymax= ls)) +
+  geom_pointrange(size = 0.4) + 
+  facet_wrap(~ metodo, nrow = 3) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7)) +
+  xlab("Numero de Intervalo") + 
+  ylab("Intervalo") + 
+  ggtitle("Intervalos de confianza para los metodos")
+```
+
+La columna cobertura es una estimación de la cobertura del intervalo basada en las simulaciones, para calcularla simplemente se escribe el porcentaje de los intervalos que incluyeron el verdadero valor del parámetro. La cobertura usando el método de la normal es de 89.6%, mientras que el de percentiles es de 90%, y el de BCa de 90.2%. Hay mayor cobertura en los intervalos que se calularon mediante el método BCa.
+
+
+## Cobertura de intervalos de confianza para una Poisson
+
+Ahora analizamos la cobertura ede intervalos de confianza para estimaciones del parámetro $e^{-2\lambda}.
+
+```{r}
+# Cobertura de intervalos de confianza.
+# inciso b)
+# Muestra de Poisson con lambda = 2.5
+# Estadistico de interes: exp(-2 * lambda) = 0.006737947
+tt = 0.006737947
+n = 500
+btps <- function(){
+  smple = sample(muestra,10,replace = TRUE)
+  return(exp( - 2 * mean(smple)))
+}
+st_ps <- function(data, indices){
+  d <- data[indices,]
+  return(exp( - 2 * mean(d)))
+}
+df.ps <- data.frame(matrix(0,n,7))
+colnames(df.ps)=c('li.nor','lu.nor','li.per','lu.per','li.bca','lu.bca','theta')
+set.seed(221285)
+for(i in 1:n){
+  muestra = rpois(20,2.5)
+  theta_est = exp(-2*mean(muestra))
+  df.ps[i,'theta'] = theta_est
+  thetaboot = rdply(B,btps)
+  # Intervalo por metodo normal
+  sdtheta = sd(thetaboot$V1)
+  df.ps[i,'li.nor'] = theta_est - 1.96 * sdtheta
+  df.ps[i,'lu.nor'] = theta_est + 1.96 * sdtheta
+  # Intervalo por metodo de percentiles
+  df.ps[i,'li.per'] = as.numeric(quantile(thetaboot$V1, prob = 0.025))
+  df.ps[i,'lu.per'] = as.numeric(quantile(thetaboot$V1, prob = 0.975))
+  # Intervalo por metodo BCa
+  obj = boot(data = as.data.frame(muestra), statistic = st_ps, R = 6000)
+  obj2 = boot.ci(obj, statistic = st_ps, type="bca", index=1)
+  df.ps[i,'li.bca'] = obj2$bca[4]
+  df.ps[i,'lu.bca'] = obj2$bca[5]
+}
+
+# Revisar en que caso esta el intervalo respecto al parametro
+# Cobertura
+cob.norm = sum(df.ps['li.nor'] <= tt & tt <= df.ps['lu.nor'])
+cob.perc = sum(df.ps['li.per'] <= tt & tt <= df.ps['lu.per'])
+cob.bca = sum(df.ps['li.bca'] <= tt & tt <= df.ps['lu.bca'])
+# Fallo izquierdo
+fizq.norm = sum(df.ps['li.nor'] > tt)
+fizq.perc = sum(df.ps['li.per'] > tt)
+fizq.bca = sum(df.ps['li.bca'] > tt)
+# Fallo derecho
+fder.norm = sum(df.ps['lu.nor'] < tt)
+fder.perc = sum(df.ps['lu.per'] < tt)
+fder.bca = sum(df.ps['lu.bca'] < tt)
+
+tab <- data.frame(fizq = c(fizq.norm,fizq.perc,fizq.bca),
+                  fder = c(fder.norm,fder.perc,fder.bca),
+                  cob = c(cob.norm,cob.perc,cob.bca))
+rownames(tab) = c('norm','perc','bca')
+tab/500
+
+# Grafica de intervalos
+coef_df_ps = df.ps %>%
+  gather(metodo,var,-theta) %>%
+  separate(metodo, c("intervalo", "metodo"), 2) %>%
+  mutate(metodo = substr(metodo,2,10))
+x = c(1:n,1:n,(n+1):(2*n),(n+1):(2*n),(2*n+1):(3*n),(2*n+1):(3*n))
+coef_df_ps['row'] = x
+coef_df_ps <-  spread(coef_df_ps,intervalo,var)
+coef_df_ps <- arrange(coef_df_ps,metodo,row,theta)
+coef_df_ps['ind'] <- rep(1:n,each=3)
+coef_df_ps['row'] <- c(1:n,1:n,1:n)
+
+ggplot(coef_df_ps, aes(x=row, y = theta, ymin = li, ymax= lu)) +
+  geom_pointrange(size = 0.4) + 
+  facet_wrap(~ metodo, scales = "free_y", nrow = 3) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 7)) +
+  xlab("Numero de Intervalo") + 
+  ylab("Intervalo de confianza") + 
+  ggtitle("IC para exp(-2lambda) de muestras Poisson")
+```
+
+
+## Problema 6
+
+El objetivo de este problema es responder una pregunta relacionada con la migración en Mexico a través de dos gráficas. Los datos vienen de la página del CONAPO y son sobre migración interna, es decir, dentro del país.
+
+Primero se leen los datos con la librería `xlsx`. Luego se limpian renglones y columnas vacías:
+
+```{r}
+datos <- read.xlsx("Cuadros_2010.xlsx",sheetName="Educacion",header=TRUE,
+                   colClasses=c("character",rep("double",14)))
+datos <- datos[4:35,1:15]
+rownames(datos) <- 1:32
+```
+
+Los datos de interés son los de la proporción migrante relativa para cada nivel de educacion contra los de los no migrantes. Los datos absolutos en realidad no son relevantes para el analisis.
+
+```{r}
+datos.edu <- data.frame(datos[1], datos[3], datos[5], datos[7], datos[10], 
+                        datos[12], datos[14])
+colnames(datos.edu) <- c('Estado','mig.sin','mig.bas','mig.pos',
+                         'nomig.sin','nomig.bas','nomig.pos')
+head(datos)
+```
+
+
+¿Cumplen los principios de los datos limpios?
+
+1. Cada variable forma una columna: no, porque la variable migracion no migración para cada nivel de educación están en diferentes columnas.
+
+2. Cada observación forma un renglón: no, porque hay varias observaciones por columna.
+
+3. Cada tipo de unidad observacional forma una tabla: no necesariamente, porque podría ser más conveniente que se tuviera una tabla para migrantes y otra para no migrantes.
+
+Para que cumplan los principios, hacemos lo siguiente:
+
+```{r}
+datos.edu <- datos.edu %>%
+  mutate(id = (1:32)-1) %>%
+  gather(var,valor,-Estado,-id) %>%
+  separate(var, c("migracion", "educacion"), "[.]")
+
+datos.edu <- transform(datos.edu,
+              educacion=factor(educacion,levels=c("sin","bas","pos")))
+levels(datos.edu$educacion) = c('Sin educacion','Educacion Basica','Educacion Posterior')
+```
+
+La pregunta que se busca responder es: Las personas migrantes tienen mayor educación?
+
+Para responder esta pregunta podemos ver diagramas de caja y brazos de las proporciones relativas de las personas divididas por migrantes y por niveles de educación.
+
+```{r}
+levels(datos.edu$educacion) = c('Sin educacion','Educacion Basica','Educacion Posterior')
+ggplot(datos.edu, aes(x = migracion, y = valor))  + 
+  geom_jitter() +
+  geom_boxplot() +
+  facet_wrap(~educacion) +
+  xlab('Migracion') + 
+  ylab('Proporcion relativa') 
+```
+
+En la gráfica se observa que en las gráficas de Educacion Basica y Educacion Posterior, la relación entre migrantes y no migrantes está al revés. En mi opinión, ésta sí es una diferencia significativa que indica que las personas que migran mas tienen mayor educación.
+
+También se puede analizar este fenómeno geográficamente:
+
+```{r}
+# Mapa
+library(ggplot2)
+library(dplyr)
+library(maptools)
+library(rgdal)
+library(Hmisc)
+
+datos.pos <- filter(datos.edu, educacion=='Educacion Posterior')
+quantile(datos.pos$valor)
+datos.pos$tasa = cut(as.numeric(datos.pos$valor),breaks=c(17,27,32,37,55),c("Bajo","Medio","Alto","Muy alto"))
+
+edo_shp <- readOGR("estados_ligero", layer = "Mex_Edos")
+edo_shp@data$id <- rownames(edo_shp@data)
+edo_df <- fortify(edo_shp,region="id")
+edo_df <- mutate(edo_df,id = as.numeric(id))
+
+edo.pos <- left_join(datos.pos,edo_df)
+edo.pos <- transform(edo.pos,
+                     migracion=factor(migracion,levels=c('mig','nomig')))
+levels(edo.pos$migracion) = c('Migrantes','No inmigrantes')
+
+ggplot(data = edo.pos, aes(long, lat, group=group)) + 
+  geom_polygon(aes(fill = tasa, group = group))  +
+  geom_path(color = "gray", size = 0.15, aes(group = group)) +
+  scale_fill_brewer(palette = "PiYG") +
+  facet_wrap(~migracion) +
+  labs(title = "Porcentaje relativo de migracion", x = "", y = "", fill = "Tasa") + 
+  theme(legend.title.align = 0.5) + 
+  coord_fixed()
+```
+
+
+En la gráfica se ve que la población relativa migrante tiene mayor educación que la población relativa no migrante. La discretización se hizo para la población relativa de ``educación superior''. 
+
+</br>
+</br>
+
+**No he dado ni recibido ayuda no autorizada en la realización de este examen.**
+
+</br>
+</br>
+
+Andreu Boada de Atela
+--------------------
